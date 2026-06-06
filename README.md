@@ -1,16 +1,24 @@
-## Hi there 👋
+# Matthew Anton — STL Automate
 
-<!--
-**irsiya247/irsiya247** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
+Co-founder building AI automation systems for small businesses and real estate operators.
 
-Here are some ideas to get you started:
+## What I Build
 
-- 🔭 I’m currently working on ...
-- 🌱 I’m currently learning ...
-- 👯 I’m looking to collaborate on ...
-- 🤔 I’m looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
+- **AI Receptionists** — inbound lead qualification via SMS/email with sub-60s response, powered by n8n + OpenAI + Twilio
+- **Lead Routing Engines** — 4-way lead scoring with CRM auto-logging and hot-lead WhatsApp alerts
+- **Workflow Automation** — end-to-end business process automation connecting CRMs, calendars, and communication tools
+
+## Stack
+
+`n8n` `Make` `OpenAI` `Twilio` `JavaScript` `Python` `Follow Up Boss` `Calendly` `Slack`
+
+## Current Venture
+
+**STL Automate** — [stlautomate.com](https://stlautomate.com)
+AI automation agency serving STL-area businesses. Systems deployed in production.
+
+## Background
+
+Security+ certified | Claim Academy graduate | Cybersecurity foundation informs how I think about data pipelines and access control in automation systems.
+
+📬 SafeKeeperMatt@gmail.com · [LinkedIn](https://linkedin.com/in/matthewjanton)
