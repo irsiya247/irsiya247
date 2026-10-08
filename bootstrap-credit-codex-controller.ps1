@@ -66,22 +66,30 @@ $existing = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
         $_.Name -in @('powershell.exe', 'pwsh.exe') -and
         $_.CommandLine -like '*CodexController\codex-controller\supervisor.ps1*'
     })
-if ($existing.Count -eq 0) {
-    $args = '-NoProfile -ExecutionPolicy Bypass -File "' + $Supervisor + '"'
-    $new = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList $args -PassThru
-    Start-Sleep -Seconds 4
-    $new.Refresh()
-    if ($new.HasExited) {
-        $detail = ''
-        if (Test-Path -LiteralPath $LogPath) {
-            $detail = (Get-Content -LiteralPath $LogPath -Tail 15) -join [Environment]::NewLine
-        }
-        throw ('Supervisor exited during bootstrap. ' + $detail)
+# Restart only this exact controller supervisor so upgraded mutex-recovery code
+# is picked up immediately. Never stop an unrelated Codex session or repository worker.
+if ($existing.Count -gt 0) {
+    foreach ($instance in $existing) {
+        Write-Host ('Restarting prior controller supervisor PID {0}' -f $instance.ProcessId)
+        Stop-Process -Id $instance.ProcessId -Force -ErrorAction Stop
     }
+    Start-Sleep -Seconds 2
 }
+$args = '-NoProfile -ExecutionPolicy Bypass -File "' + $Supervisor + '"'
+$new = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList $args -PassThru
+Start-Sleep -Seconds 5
+$new.Refresh()
+if ($new.HasExited) {
+    $detail = ''
+    if (Test-Path -LiteralPath $LogPath) {
+        $detail = (Get-Content -LiteralPath $LogPath -Tail 15) -join [Environment]::NewLine
+    }
+    throw ('Supervisor exited during bootstrap. ' + $detail)
+}
+Write-Host ('Supervisor PID: {0}' -f $new.Id)
 
 Write-Host ''
-Write-Host 'STL CODEX SUPERVISOR: ACTIVE'
+Write-Host 'STL CODEX SUPERVISOR: ACTIVE (controller execution pending verification)'
 Write-Host "Controller: $Controller"
 Write-Host "Log:        $LogPath"
 Write-Host "Startup:    $launcher"
