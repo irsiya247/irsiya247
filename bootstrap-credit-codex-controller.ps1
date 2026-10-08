@@ -98,8 +98,14 @@ if ($children.Count -eq 0) {
     if (Test-Path -LiteralPath $LogPath) {
         Get-Content -LiteralPath $LogPath -Tail 8
     }
+    $childLog = Join-Path $StateDir 'controller.log'
+    if (Test-Path -LiteralPath $childLog) {
+        Write-Host 'Recent controller events:'
+        Get-Content -LiteralPath $childLog -Tail 10
+    }
     $childError = Join-Path $StateDir 'controller.stderr.log'
     if (Test-Path -LiteralPath $childError) {
+        Write-Host 'Recent controller stderr:'
         Get-Content -LiteralPath $childError -Tail 8
     }
 } else {
