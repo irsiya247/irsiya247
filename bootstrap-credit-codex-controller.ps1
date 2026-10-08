@@ -3,9 +3,10 @@ $ErrorActionPreference = 'Stop'
 $ControlRepoUrl = 'https://github.com/irsiya247/stl-automate-tools.git'
 $InstallRoot = Join-Path $env:LOCALAPPDATA 'STLAutomate\CodexController'
 $Controller = Join-Path $InstallRoot 'codex-controller\controller.ps1'
+$Supervisor = Join-Path $InstallRoot 'codex-controller\supervisor.ps1'
 $TargetRepo = 'C:\Users\irsiy\Documents\Codex\credit-accuracy-c0'
 $StateDir = Join-Path $env:LOCALAPPDATA 'STLAutomate\CodexControllerState'
-$LogPath = Join-Path $StateDir 'controller.log'
+$LogPath = Join-Path $StateDir 'supervisor.log'
 
 function Require-Command([string]$Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
@@ -14,7 +15,6 @@ function Require-Command([string]$Name) {
 }
 
 Require-Command 'git'
-
 if (-not (Test-Path -LiteralPath (Join-Path $TargetRepo '.git'))) {
     throw "Credit Accuracy repository not found at $TargetRepo"
 }
@@ -28,60 +28,63 @@ if (-not $codexExe) {
     throw "Codex executable not found under $codexRoot"
 }
 
-$existing = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -like '*codex-controller\controller.ps1*' }
-
-if (-not $existing) {
-    if (Test-Path -LiteralPath (Join-Path $InstallRoot '.git')) {
-        git -C $InstallRoot fetch origin main
-        if ($LASTEXITCODE -ne 0) { throw 'Failed to fetch controller repository.' }
-        git -C $InstallRoot reset --hard origin/main
-        if ($LASTEXITCODE -ne 0) { throw 'Failed to update controller repository.' }
-    } else {
-        New-Item -ItemType Directory -Path (Split-Path $InstallRoot -Parent) -Force | Out-Null
-        git clone $ControlRepoUrl $InstallRoot
-        if ($LASTEXITCODE -ne 0) {
-            throw 'Failed to clone the private controller repository. Verify this Windows user is authenticated to GitHub.'
-        }
+if (Test-Path -LiteralPath (Join-Path $InstallRoot '.git')) {
+    $dirty = @(git -C $InstallRoot status --porcelain)
+    if ($LASTEXITCODE -ne 0 -or $dirty.Count -gt 0) {
+        throw 'Controller repository is dirty. No files were reset. Review uncommitted control artifacts before updating.'
+    }
+    git -C $InstallRoot fetch origin main
+    if ($LASTEXITCODE -ne 0) { throw 'Failed to fetch controller source.' }
+    git -C $InstallRoot merge --ff-only origin/main
+    if ($LASTEXITCODE -ne 0) { throw 'Controller repository diverged. No history was discarded.' }
+} else {
+    New-Item -ItemType Directory -Path (Split-Path $InstallRoot -Parent) -Force | Out-Null
+    git clone $ControlRepoUrl $InstallRoot
+    if ($LASTEXITCODE -ne 0) {
+        throw 'Could not clone the private controller repository using existing GitHub credentials.'
     }
 }
 
-if (-not (Test-Path -LiteralPath $Controller)) {
-    throw "Controller script missing at $Controller"
+if (-not (Test-Path -LiteralPath $Controller -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $Supervisor -PathType Leaf)) {
+    throw 'Controller or supervisor script is missing after source update.'
 }
+
+New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
 
 $startup = [Environment]::GetFolderPath('Startup')
 $launcher = Join-Path $startup 'STL-Codex-Controller.cmd'
 $launcherBody = @'
 @echo off
-start "" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%LOCALAPPDATA%\STLAutomate\CodexController\codex-controller\controller.ps1"
+start "" /min powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%LOCALAPPDATA%\STLAutomate\CodexController\codex-controller\supervisor.ps1"
 '@
 [IO.File]::WriteAllText($launcher, $launcherBody, [Text.Encoding]::ASCII)
 
-if (-not $existing) {
-    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
-        '-NoProfile',
-        '-ExecutionPolicy', 'Bypass',
-        '-File', $Controller
-    )
+# The supervisor is the only launcher from this point forward.
+$existing = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.Name -in @('powershell.exe', 'pwsh.exe') -and
+        $_.CommandLine -like '*CodexController\codex-controller\supervisor.ps1*'
+    })
+if ($existing.Count -eq 0) {
+    $args = '-NoProfile -ExecutionPolicy Bypass -File "' + $Supervisor + '"'
+    $new = Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList $args -PassThru
+    Start-Sleep -Seconds 4
+    $new.Refresh()
+    if ($new.HasExited) {
+        $detail = ''
+        if (Test-Path -LiteralPath $LogPath) {
+            $detail = (Get-Content -LiteralPath $LogPath -Tail 15) -join [Environment]::NewLine
+        }
+        throw ('Supervisor exited during bootstrap. ' + $detail)
+    }
 }
 
-Start-Sleep -Seconds 4
-
-$running = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -like '*codex-controller\controller.ps1*' }
-
-if (-not $running) {
-    throw 'Controller process did not remain running. Check the local controller log.'
-}
-
-New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
-
 Write-Host ''
-Write-Host 'STL CODEX CONTROLLER: READY'
-Write-Host "Install: $InstallRoot"
-Write-Host "Startup: $launcher"
-Write-Host "Target:  $TargetRepo"
-Write-Host "Log:     $LogPath"
+Write-Host 'STL CODEX SUPERVISOR: ACTIVE'
+Write-Host "Controller: $Controller"
+Write-Host "Log:        $LogPath"
+Write-Host "Startup:    $launcher"
 Write-Host ''
+Write-Host 'The supervisor restarts the local Codex controller after unexpected exits.'
 Write-Host 'No Desktop Commander is required.'
