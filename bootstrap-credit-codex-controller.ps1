@@ -88,6 +88,24 @@ if ($new.HasExited) {
 }
 Write-Host ('Supervisor PID: {0}' -f $new.Id)
 
+$children = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object {
+        $_.Name -in @('powershell.exe', 'pwsh.exe') -and
+        $_.CommandLine -like '*CodexController\codex-controller\controller.ps1*'
+    })
+if ($children.Count -eq 0) {
+    Write-Warning 'Supervisor is active but no controller child was observed yet.'
+    if (Test-Path -LiteralPath $LogPath) {
+        Get-Content -LiteralPath $LogPath -Tail 8
+    }
+    $childError = Join-Path $StateDir 'controller.stderr.log'
+    if (Test-Path -LiteralPath $childError) {
+        Get-Content -LiteralPath $childError -Tail 8
+    }
+} else {
+    Write-Host ('Controller child PID(s): {0}' -f (($children | ForEach-Object ProcessId) -join ', '))
+}
+
 Write-Host ''
 Write-Host 'STL CODEX SUPERVISOR: ACTIVE (controller execution pending verification)'
 Write-Host "Controller: $Controller"
